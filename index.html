@@ -1,11 +1,260 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Raffle</title>
-  </head>
-  <body>
-    <h1>Raffle</h1>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Election Voting Code</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem 1.5rem;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+    p { color: var(--muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem; }
+
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 0.85rem 1.25rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s ease;
+      display: inline-block;
+      text-decoration: none;
+    }
+
+    button:hover:not(:disabled) { background: var(--primary-hover); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .code-display {
+      background: #090d16;
+      border: 2px dashed var(--accent);
+      border-radius: 8px;
+      padding: 1.25rem;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--accent);
+      margin-bottom: 1.25rem;
+      user-select: all;
+      word-break: break-all;
+    }
+
+    .btn-group { display: flex; flex-direction: column; gap: 0.75rem; }
+    .btn-secondary { background: #334155; color: #fff; }
+    .btn-secondary:hover:not(:disabled) { background: #475569; }
+
+    .error-msg {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      padding: 0.75rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .admin-panel {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      text-align: left;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div id="view-initial">
+      <h1>Election Voting Code</h1>
+      <p>Click the button below to receive your unique voting code.</p>
+      <div id="error-box" class="error-msg hidden"></div>
+      <button id="draw-btn" type="button">🎲 GET MY VOTING CODE</button>
+    </div>
+
+    <div id="view-result" class="hidden">
+      <h1 id="result-title">Your Voting Code</h1>
+      <p id="result-subtitle">Keep this code private.</p>
+      <div id="code-box" class="code-display"></div>
+      <div class="btn-group">
+        <button id="copy-btn" class="btn-secondary" type="button">COPY CODE</button>
+        <a id="vote-btn" class="hidden" target="_blank" rel="noopener noreferrer">
+          <button type="button">GO TO VOTING</button>
+        </a>
+      </div>
+    </div>
+
+    <div id="admin-panel" class="admin-panel hidden">
+      <strong>Dev / Admin Inspection</strong>
+      <div id="admin-stats" style="margin: 0.5rem 0;">Loading stats...</div>
+      <button id="admin-reset-btn" class="btn-secondary" style="font-size: 0.75rem; padding: 0.4rem;" type="button">Clear Local Browser Claim</button>
+    </div>
+  </div>
+
+  <script>
+    // --- CONFIGURATION ---
+    const ELECTION_URL = ""; // e.g. "https://tapvoter.com/your-election"
+    const ADMIN_MODE = false; // Set to true to display the dev inspection panel
+    const STORAGE_KEY = "election_voter_claim";
+
+    const drawBtn = document.getElementById("draw-btn");
+    const copyBtn = document.getElementById("copy-btn");
+    const voteBtn = document.getElementById("vote-btn");
+    const codeBox = document.getElementById("code-box");
+    const errorBox = document.getElementById("error-box");
+    const viewInitial = document.getElementById("view-initial");
+    const viewResult = document.getElementById("view-result");
+    const resultTitle = document.getElementById("result-title");
+    const resultSubtitle = document.getElementById("result-subtitle");
+    const adminPanel = document.getElementById("admin-panel");
+    const adminStats = document.getElementById("admin-stats");
+    const adminResetBtn = document.getElementById("admin-reset-btn");
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.classList.remove("hidden");
+    }
+
+    function renderClaimedCode(code, isRepeat = false) {
+      viewInitial.classList.add("hidden");
+      viewResult.classList.remove("hidden");
+      codeBox.textContent = code;
+
+      if (isRepeat) {
+        resultTitle.textContent = "Your Assigned Code";
+        resultSubtitle.textContent = "You have already received a voting code on this browser.";
+      }
+
+      if (ELECTION_URL && ELECTION_URL.trim() !== "") {
+        voteBtn.href = ELECTION_URL;
+        voteBtn.classList.remove("hidden");
+      }
+    }
+
+    // Check localStorage on load
+    try {
+      const existingCode = localStorage.getItem(STORAGE_KEY);
+      if (existingCode) {
+        renderClaimedCode(existingCode, true);
+      }
+    } catch (e) {
+      console.warn("localStorage unavailable:", e);
+    }
+
+    // Handle Draw
+    drawBtn.addEventListener("click", async () => {
+      drawBtn.disabled = true;
+      drawBtn.textContent = "🎲 Drawing your code...";
+      errorBox.classList.add("hidden");
+
+      try {
+        const response = await fetch("/.netlify/functions/draw-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          if (data.error === "NO_CODES_AVAILABLE") {
+            showError("Voting codes are currently exhausted. Please contact the election administrator.");
+          } else {
+            showError(data.message || "Failed to retrieve code. Please try again.");
+          }
+          drawBtn.disabled = false;
+          drawBtn.textContent = "🎲 GET MY VOTING CODE";
+          return;
+        }
+
+        try {
+          localStorage.setItem(STORAGE_KEY, data.code);
+        } catch (e) {
+          console.warn("Failed to persist code locally:", e);
+        }
+
+        renderClaimedCode(data.code, false);
+
+      } catch (err) {
+        showError("A network error occurred. Please check your connection and try again.");
+        drawBtn.disabled = false;
+        drawBtn.textContent = "🎲 GET MY VOTING CODE";
+      }
+    });
+
+    // Copy to clipboard
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(codeBox.textContent.trim());
+        copyBtn.textContent = "COPIED!";
+        setTimeout(() => { copyBtn.textContent = "COPY CODE"; }, 2000);
+      } catch (err) {
+        copyBtn.textContent = "SELECT MANUALLY";
+      }
+    });
+
+    // Dev/Admin Mode Inspection
+    if (ADMIN_MODE) {
+      adminPanel.classList.remove("hidden");
+      
+      const fetchStats = async () => {
+        try {
+          const res = await fetch("/.netlify/functions/draw-code?action=stats");
+          const stats = await res.json();
+          adminStats.innerHTML = `Loaded in CSV: ${stats.totalLoaded}<br>Claimed: ${stats.totalClaimed}<br>Remaining: ${stats.remaining}`;
+        } catch (e) {
+          adminStats.textContent = "Failed to load admin stats.";
+        }
+      };
+
+      fetchStats();
+
+      adminResetBtn.addEventListener("click", () => {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          location.reload();
+        } catch (e) {}
+      });
+    }
+  </script>
+</body>
 </html>
