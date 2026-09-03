@@ -1,2 +1,6 @@
-[functions]
-  directory = "netlify/functions"
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[blobs]
+  # Enables Netlify Blobs runtime integration
